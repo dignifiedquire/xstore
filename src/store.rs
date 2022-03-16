@@ -69,20 +69,18 @@ impl Blockstore {
 
     fn create_has_request(&self, c: &Cid) -> Message {
         // TODO: use other slots
-        let len = {
-            let slot: &mut Box<[u8]> = unsafe { &mut *self.sender_buffers[0].get() };
-            slot.as_mut()[0] = Request::Has as u8;
-            // TODO: Use write_bytes when can get the length
-            let bytes = c.to_bytes();
-            let len = bytes.len();
-            slot.as_mut()
-                .get_mut(1..len + 1)
-                .expect("message too large")
-                .copy_from_slice(&bytes);
-            1 + len
-        };
 
-        (self.sender_buffers[0].get().cast(), len as _)
+        let slot: &mut Box<[u8]> = unsafe { &mut *self.sender_buffers[0].get() };
+        slot.as_mut()[0] = Request::Has as u8;
+        // TODO: Use write_bytes when can get the length
+        let bytes = c.to_bytes();
+        let len = bytes.len();
+        slot.as_mut()
+            .get_mut(1..len + 1)
+            .expect("message too large")
+            .copy_from_slice(&bytes);
+
+        (slot.as_mut_ptr().cast(), (len + 1) as _)
     }
 }
 
@@ -152,8 +150,21 @@ impl Error {
 mod tests {
     use super::*;
 
+    use cid::multihash::{Code, MultihashDigest};
+    use cid::Cid;
+
     #[test]
     fn test_create_memory() {
         let _store = Blockstore::new_memory();
+    }
+
+    #[test]
+    fn test_has() {
+        let bs = Blockstore::new_memory();
+        for i in 0..100 {
+            let block = format!("thing_{}", i);
+            let key = Cid::new_v1(0x55, Code::Sha2_256.digest(block.as_bytes()));
+            assert!(!bs.has(&key).unwrap())
+        }
     }
 }
