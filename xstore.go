@@ -1,6 +1,13 @@
 package main
 
+/*
+#include <stdint.h>
+#cgo LDFLAGS: -Wl,--allow-multiple-definition
+*/
+import "C"
+
 import (
+	"reflect"
 	"unsafe"
 
 	"github.com/filecoin-project/lotus/blockstore"
@@ -8,62 +15,20 @@ import (
 	"github.com/ipfs/go-cid"
 )
 
-/*
-#include <stdint.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
-
-typedef struct Token {
-  struct Slot *slot;
-  uint64_t stamp;
-} Token;
-
-typedef struct Slot {
-  uint64_t stamp;
-  uint8_t *msg_ptr;
-  uint64_t msg_len;
-
-} Slot;
-
-typedef struct Channel {
-  uint64_t head;
-  uint64_t tail;
-  struct Slot *buffer;
-  uintptr_t cap;
-  uint64_t one_lap;
-  uint64_t mark_bit;
-} Channel;
-
-typedef const uint8_t* buf_t;
-*/
-import "C"
-
-import "reflect"
-
-func toCid(k C.buf_t, k_len C.int32_t) cid.Cid {
+func toCid(k *C.uint8_t, k_len C.int32_t) cid.Cid {
 	s := &struct{ str string }{str: StringN(k, k_len)}
 	return *(*cid.Cid)(unsafe.Pointer(s))
 }
 
-type RawChannel = C.struct_Channel
-
-//export xstore_new_memory
-func xstore_new_memory(sender *RawChannel, receiver *RawChannel) C.int32_t {
-	bs := blockstore.NewMemory()
-	return C.int32_t(Register(bs, sender, receiver))
-}
-
 //export xstore_get
-func xstore_get(store C.int32_t, k C.buf_t, k_len C.int32_t, block **C.uint8_t, size *C.int32_t) C.int32_t {
+func xstore_get(store C.int32_t, k *C.uint8_t, k_len C.int32_t, block **C.uint8_t, size *C.int32_t) C.int32_t {
 	c := toCid(k, k_len)
 	bs := Lookup(int32(store))
 	if bs == nil {
 		return ErrNoStore
 	}
 	err := bs.Store.View(c, func(data []byte) error {
-		*block = (C.buf_t)(C.CBytes(data))
+		*block = (*C.uint8_t)(C.CBytes(data))
 		*size = C.int32_t(len(data))
 		return nil
 	})
@@ -79,7 +44,7 @@ func xstore_get(store C.int32_t, k C.buf_t, k_len C.int32_t, block **C.uint8_t, 
 }
 
 //export xstore_put
-func xstore_put(store C.int32_t, k C.buf_t, k_len C.int32_t, block C.buf_t, block_len C.int32_t) C.int32_t {
+func xstore_put(store C.int32_t, k *C.uint8_t, k_len C.int32_t, block *C.uint8_t, block_len C.int32_t) C.int32_t {
 	bs := Lookup(int32(store))
 	if bs == nil {
 		return ErrNoStore
@@ -97,9 +62,9 @@ func xstore_put(store C.int32_t, k C.buf_t, k_len C.int32_t, block C.buf_t, bloc
 //export xstore_put_many
 func xstore_put_many(
 	store C.int32_t,
-	ks_ptr C.buf_t, ks_len C.int32_t,
+	ks_ptr *C.uint8_t, ks_len C.int32_t,
 	ks_lens_ptr *C.int32_t, ks_lens_len C.int32_t,
-	blocks_ptr C.buf_t, blocks_len C.int32_t,
+	blocks_ptr *C.uint8_t, blocks_len C.int32_t,
 	blocks_lens_ptr *C.int32_t, blocks_lens_len C.int32_t,
 ) C.int32_t {
 	bs := Lookup(int32(store))
@@ -115,12 +80,12 @@ func xstore_put_many(
 	for i := range ks_lens {
 		k := uintptr(unsafe.Pointer(ks_ptr)) + ks_offset
 		k_len := ks_lens[i]
-		c := toCid(C.buf_t(unsafe.Pointer(k)), k_len)
+		c := toCid((*C.uint8_t)(unsafe.Pointer(k)), k_len)
 		ks_offset += uintptr(k_len)
 
 		block := uintptr(unsafe.Pointer(blocks_ptr)) + blocks_offset
 		block_len := blocks_lens[i]
-		b, _ := blocks.NewBlockWithCid(Bytes(C.buf_t(unsafe.Pointer(block)), block_len), c)
+		b, _ := blocks.NewBlockWithCid(Bytes((*C.uint8_t)(unsafe.Pointer(block)), block_len), c)
 		bss[i] = b
 		blocks_offset += uintptr(block_len)
 	}
@@ -131,7 +96,7 @@ func xstore_put_many(
 }
 
 //export xstore_delete
-func xstore_delete(store C.int32_t, k C.buf_t, k_len C.int32_t) C.int32_t {
+func xstore_delete(store C.int32_t, k *C.uint8_t, k_len C.int32_t) C.int32_t {
 	c := toCid(k, k_len)
 	bs := Lookup(int32(store))
 	if bs == nil {
@@ -144,7 +109,7 @@ func xstore_delete(store C.int32_t, k C.buf_t, k_len C.int32_t) C.int32_t {
 }
 
 //export xstore_has
-func xstore_has(store C.int32_t, k C.buf_t, k_len C.int32_t) C.int32_t {
+func xstore_has(store C.int32_t, k *C.uint8_t, k_len C.int32_t) C.int32_t {
 	c := toCid(k, k_len)
 	bs := Lookup(int32(store))
 	if bs == nil {
@@ -176,7 +141,7 @@ func Int32N(ptr *C.int32_t, len C.int32_t) []C.int32_t {
 	return slice
 }
 
-func Bytes(ptr C.buf_t, len C.int32_t) []byte {
+func Bytes(ptr *C.uint8_t, len C.int32_t) []byte {
 	if ptr == nil {
 		return nil
 	}
@@ -187,7 +152,7 @@ func Bytes(ptr C.buf_t, len C.int32_t) []byte {
 	return slice
 }
 
-func StringN(ptr C.buf_t, len C.int32_t) string {
+func StringN(ptr *C.uint8_t, len C.int32_t) string {
 	bytes := Bytes(ptr, len)
 	return string(bytes)
 }
