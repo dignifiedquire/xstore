@@ -11,6 +11,7 @@ require (
 require (
 	github.com/btcsuite/btcd v0.21.0-beta // indirect
 	github.com/crackcomm/go-gitignore v0.0.0-20170627025303-887ab5e44cc3 // indirect
+	github.com/dignifiedquire/gsysint v0.0.0-20220316193947-d2ac950b6abe // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect

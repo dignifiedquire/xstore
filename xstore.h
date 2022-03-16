@@ -26,6 +26,7 @@ typedef struct Channel {
   uintptr_t cap;
   uint64_t one_lap;
   uint64_t mark_bit;
+  void *receiver;
 } Channel;
 
 #endif

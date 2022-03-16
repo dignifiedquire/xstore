@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/filecoin-project/lotus/blockstore"
+	"github.com/dignifiedquire/gsysint/g"
 )
 
 const (
@@ -47,6 +48,7 @@ type Slot struct {
 	Store    blockstore.Blockstore
 	Sender   *RawChannel
 	Receiver *RawChannel
+	ReceiverMutex *g.Mutex
 }
 
 // Register a new blockstore and get a handle.
@@ -58,6 +60,7 @@ func Register(bs blockstore.Blockstore, sender *RawChannel, receiver *RawChannel
 		Store:    bs,
 		Sender:   sender,
 		Receiver: receiver,
+		ReceiverMutex: &g.Mutex{},
 	}
 
 	idx := lastIdx

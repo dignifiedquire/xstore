@@ -44,6 +44,25 @@ impl Blockstore {
         store
     }
 
+    pub fn has_cgo(&self, c: &Cid) -> Result<bool, Error> {
+        let bytes = c.to_bytes();
+        unsafe {
+            match crate::sys::xstore_has(self.handle, bytes.as_ptr(), bytes.len() as i32) {
+                // We shouldn't get an "error not found" here, but there's no reason to be strict
+                // about it.
+                0 | -2 => Ok(false),
+                1 => Ok(true),
+                // Panic on unknown values. There's a bug in the program.
+                r @ 2.. => panic!("invalid return value from has: {}", r),
+                // Panic if the store isn't registered. This means something _very_ unsafe is going
+                // on and there is a bug in the program.
+                -1 => panic!("blockstore {} not registered", self.handle),
+                // Otherwise, return "other". We should add error codes in the future.
+                _ => Err(Error::Other),
+            }
+        }
+    }
+
     pub fn has(&self, c: &Cid) -> Result<bool, Error> {
         let msg = self.create_has_request(c);
         self.send_req(msg);
@@ -58,7 +77,7 @@ impl Blockstore {
 
     fn send_req(&self, req: Message) {
         let sender: &Channel = unsafe { self.sender.as_ref() };
-        sender.send(req).unwrap();
+        sender.send(req, Some(self.handle)).unwrap();
     }
 
     fn recv_resp(&self) -> Result<Response, Error> {
@@ -165,6 +184,16 @@ mod tests {
             let block = format!("thing_{}", i);
             let key = Cid::new_v1(0x55, Code::Sha2_256.digest(block.as_bytes()));
             assert!(!bs.has(&key).unwrap())
+        }
+    }
+
+    #[test]
+    fn test_has_cgo() {
+        let bs = Blockstore::new_memory();
+        for i in 0..100 {
+            let block = format!("thing_{}", i);
+            let key = Cid::new_v1(0x55, Code::Sha2_256.digest(block.as_bytes()));
+            assert!(!bs.has_cgo(&key).unwrap())
         }
     }
 }

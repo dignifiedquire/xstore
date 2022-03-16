@@ -122,6 +122,9 @@ pub struct Channel {
 
     /// If this bit is set in the tail, that means the channel is disconnected.
     mark_bit: u64,
+
+    /// The next receiver go-routine to wake up
+    receiver: *mut (),
 }
 
 impl Channel {
@@ -162,6 +165,7 @@ impl Channel {
             mark_bit,
             head: AtomicU64::new(head),
             tail: AtomicU64::new(tail),
+            receiver: ptr::null_mut(),
         }
     }
 
@@ -234,7 +238,12 @@ impl Channel {
     }
 
     /// Writes a message into the channel.
-    pub unsafe fn write(&self, token: &mut Token, msg: Message) -> Result<(), Message> {
+    pub unsafe fn write(
+        &self,
+        token: &mut Token,
+        msg: Message,
+        store: Option<i32>,
+    ) -> Result<(), Message> {
         // If there is no slot, the channel is disconnected.
         if token.slot.is_null() {
             return Err(msg);
@@ -247,28 +256,36 @@ impl Channel {
         slot.msg_len.get().write(msg.1);
         slot.stamp.store(token.stamp, SeqCst);
 
+        // notify receiver
+        if let Some(store) = store {
+            crate::sys::xstore_channel_unpark(store);
+        }
+
         Ok(())
     }
 
     /// Attempts to send a message into the channel.
-    pub fn try_send(&self, msg: Message) -> Result<(), TrySendError> {
+    pub fn try_send(&self, msg: Message, store: Option<i32>) -> Result<(), TrySendError> {
         let token = &mut Token::default();
         if self.start_send(token) {
-            unsafe { self.write(token, msg).map_err(TrySendError::Disconnected) }
+            unsafe {
+                self.write(token, msg, store)
+                    .map_err(TrySendError::Disconnected)
+            }
         } else {
             Err(TrySendError::Full(msg))
         }
     }
 
     /// Sends a message into the channel.
-    pub fn send(&self, msg: Message) -> Result<(), SendError> {
+    pub fn send(&self, msg: Message, store: Option<i32>) -> Result<(), SendError> {
         let token = &mut Token::default();
         loop {
             // Try sending a message several times.
             let backoff = Backoff::new();
             loop {
                 if self.start_send(token) {
-                    let res = unsafe { self.write(token, msg) };
+                    let res = unsafe { self.write(token, msg, store) };
                     return res.map_err(SendError::Disconnected);
                 }
 
@@ -519,7 +536,7 @@ mod tests {
         let channel = Channel::with_capacity(10);
         for i in 0..10 {
             let msg = make_message(i);
-            channel.send(msg).unwrap();
+            channel.send(msg, None).unwrap();
         }
 
         for i in 0..10 {
@@ -538,7 +555,7 @@ mod tests {
         let a = std::thread::spawn(move || {
             for i in 0..100 {
                 let msg = make_message(i);
-                sender.send(msg).unwrap();
+                sender.send(msg, None).unwrap();
             }
         });
 
@@ -558,10 +575,10 @@ mod tests {
         let channel = Channel::with_capacity(10);
         for i in 0..10 {
             let msg = make_message(i);
-            channel.try_send(msg).unwrap();
+            channel.try_send(msg, None).unwrap();
         }
         let msg = make_message(10);
-        let err = channel.try_send(msg).unwrap_err();
+        let err = channel.try_send(msg, None).unwrap_err();
         match err {
             TrySendError::Full(msg) => {
                 assert_eq!(msg_slice(msg), &vec![10u8; 10]);

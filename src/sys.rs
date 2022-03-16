@@ -32,4 +32,6 @@ extern "C" {
     pub fn xstore_delete(store: i32, k: *const u8, k_len: i32) -> i32;
     pub fn xstore_has(store: i32, k: *const u8, k_len: i32) -> i32;
     pub fn xstore_new_memory(sender: *const Channel, receiver: *const Channel) -> i32;
+
+    pub fn xstore_channel_unpark(store: i32);
 }

@@ -12,6 +12,10 @@ import (
 	"sync/atomic"
 	"unsafe"
 	"encoding/binary"
+	
+	gs "github.com/dignifiedquire/gsysint"
+	"github.com/dignifiedquire/gsysint/g"
+	"github.com/dignifiedquire/gsysint/trace"
 )
 
 var slotSize uintptr 
@@ -255,7 +259,7 @@ func (c *RawChannel) TryRecv() *Message {
 	return nil
 }
 
-func (c *RawChannel) Recv() *Message {
+func (c *RawChannel) Recv(l *g.Mutex) *Message {
 	token := defaultToken()
 
 	for {
@@ -272,7 +276,17 @@ func (c *RawChannel) Recv() *Message {
 			}
 		}
 
-		backoff.Spin()
+		if l != nil {
+		// store pointer in the channel, to this goroutine
+			atomic.StorePointer(&c.receiver, g.GetG())
+			gs.Lock(l)
+			// park
+			gs.GoParkUnlock(l, g.WaitReasonZero, trace.TraceEvNone, 1)
+			// clear out ourselves
+			atomic.StorePointer(&c.receiver, nil)
+		} else {
+			backoff.Spin()
+		}
 	}
 
 	return nil
