@@ -36,11 +36,13 @@ uintptr_t xstore_inner_slotSize(void) {
 import "C"
 
 import (
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/filecoin-project/lotus/blockstore"
+	"github.com/ipfs/go-cid"
 )
 
 var slotSize uintptr
@@ -52,7 +54,58 @@ func init() {
 //export xstore_new_memory
 func xstore_new_memory(sender *C.struct_Channel, receiver *C.struct_Channel) C.int32_t {
 	bs := blockstore.NewMemory()
-	return C.int32_t(Register(bs, sender, receiver))
+	id := Register(bs, sender, receiver)
+
+	// TODO: shutdown
+	go func() {
+		for {
+			msg := sender.Recv()
+			if msg == nil {
+				// TODO: handle error/shutdown
+				continue
+			}
+			msgBytes := msg.Bytes()
+			switch msgBytes[0] {
+			case 1:
+				// Has
+				c, err := cid.Cast(msgBytes[1:])
+				if err != nil {
+					receiver.Send(msg_error(-3))
+				}
+				has, err := bs.Has(c)
+
+				switch err {
+				case nil:
+				case blockstore.ErrNotFound:
+					// Some old blockstores still return this.
+					receiver.Send(make_response([]byte{1, 0}))
+				default:
+					receiver.Send(msg_error(-4))
+				}
+
+				val := byte(0)
+				if has {
+					val = byte(1)
+				}
+				receiver.Send(make_response([]byte{1, val}))
+
+			default:
+				fmt.Println("unknown request: %v", msgBytes)
+			}
+		}
+	}()
+
+	return C.int32_t(id)
+}
+
+func msg_error(err int) *Message {
+	// TODO
+	return nil
+}
+
+func make_response(bytes []byte) *Message {
+	// TODO
+	return nil
 }
 
 type RawChannel = C.struct_Channel

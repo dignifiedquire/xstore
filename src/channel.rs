@@ -36,12 +36,12 @@ pub enum RecvError {
 }
 
 pub fn message_from_bytes(buffer: &[u8]) -> Message {
-    let len = buffer.len();
     let b = buffer.to_vec().into_boxed_slice();
-    message_from_box(b, len)
+    message_from_box(b)
 }
 
-pub fn message_from_box(b: Box<[u8]>, len: usize) -> Message {
+pub fn message_from_box(b: Box<[u8]>) -> Message {
+    let len = b.len();
     (Box::into_raw(b).cast(), len as _)
 }
 
@@ -499,7 +499,7 @@ mod tests {
     fn make_message(i: u8) -> Message {
         let len = 10;
         let data = vec![i; len].into_boxed_slice();
-        message_from_box(data, len)
+        message_from_box(data)
     }
 
     #[test]
