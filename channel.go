@@ -1,111 +1,40 @@
 package main
 
 /*
-#include <stdint.h>
-#include <stdarg.h>
-#include <stdbool.h>
+#include "xstore.h"
 
-typedef struct Token {
-  struct Slot *slot;
-  uint64_t stamp;
-} Token;
-
-typedef struct Slot {
-  uint64_t stamp;
-  uint8_t *msg_ptr;
-  uint64_t msg_len;
-
-} Slot;
-
-typedef struct Channel {
-  uint64_t head;
-  uint64_t tail;
-  struct Slot *buffer;
-  uintptr_t cap;
-  uint64_t one_lap;
-  uint64_t mark_bit;
-} Channel;
-
-
-uintptr_t xstore_inner_slotSize(void) {
-  return sizeof(Slot);
-}
-
-#cgo LDFLAGS: -Wl,--allow-multiple-definition
+const uintptr_t slot_size = sizeof(Slot);
 */
 import "C"
 
 import (
-	"fmt"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
-
-	"github.com/filecoin-project/lotus/blockstore"
-	"github.com/ipfs/go-cid"
+	"encoding/binary"
 )
 
-var slotSize uintptr
+var slotSize uintptr 
 
 func init() {
-	slotSize = uintptr(C.xstore_inner_slotSize())
+	slotSize = uintptr(C.slot_size)
 }
 
-//export xstore_new_memory
-func xstore_new_memory(sender *C.struct_Channel, receiver *C.struct_Channel) C.int32_t {
-	bs := blockstore.NewMemory()
-	id := Register(bs, sender, receiver)
-
-	// TODO: shutdown
-	go func() {
-		for {
-			msg := sender.Recv()
-			if msg == nil {
-				// TODO: handle error/shutdown
-				continue
-			}
-			msgBytes := msg.Bytes()
-			switch msgBytes[0] {
-			case 1:
-				// Has
-				c, err := cid.Cast(msgBytes[1:])
-				if err != nil {
-					receiver.Send(msg_error(-3))
-				}
-				has, err := bs.Has(c)
-
-				switch err {
-				case nil:
-				case blockstore.ErrNotFound:
-					// Some old blockstores still return this.
-					receiver.Send(make_response([]byte{1, 0}))
-				default:
-					receiver.Send(msg_error(-4))
-				}
-
-				val := byte(0)
-				if has {
-					val = byte(1)
-				}
-				receiver.Send(make_response([]byte{1, val}))
-
-			default:
-				fmt.Println("unknown request: %v", msgBytes)
-			}
-		}
-	}()
-
-	return C.int32_t(id)
+func msg_error(msg *Message, err int32) *Message {
+	msg.len = 5
+	msgBytes := msg.Bytes()
+	msgBytes[0] = 0 // error
+	binary.LittleEndian.PutUint32(msgBytes[1:5], uint32(err))
+	
+	return msg
 }
 
-func msg_error(err int) *Message {
-	// TODO
-	return nil
-}
-
-func make_response(bytes []byte) *Message {
-	// TODO
-	return nil
+func make_response(msg *Message, bytes []byte) *Message {
+	msg.len = C.uint64_t(len(bytes))
+	msgBytes := msg.Bytes()
+	copy(msgBytes, bytes)
+	
+	return msg
 }
 
 type RawChannel = C.struct_Channel
