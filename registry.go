@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/filecoin-project/lotus/blockstore"
 	"github.com/dignifiedquire/gsysint/g"
+	"github.com/filecoin-project/lotus/blockstore"
 )
 
 const (
@@ -45,9 +45,9 @@ func init() {
 }
 
 type Slot struct {
-	Store    blockstore.Blockstore
-	Sender   *RawChannel
-	Receiver *RawChannel
+	Store         blockstore.Blockstore
+	Sender        *RawChannel
+	Receiver      *RawChannel
 	ReceiverMutex *g.Mutex
 }
 
@@ -57,9 +57,9 @@ func Register(bs blockstore.Blockstore, sender *RawChannel, receiver *RawChannel
 	defer mu.Unlock()
 
 	slot := Slot{
-		Store:    bs,
-		Sender:   sender,
-		Receiver: receiver,
+		Store:         bs,
+		Sender:        sender,
+		Receiver:      receiver,
 		ReceiverMutex: &g.Mutex{},
 	}
 

@@ -257,10 +257,12 @@ impl Channel {
         slot.stamp.store(token.stamp, SeqCst);
 
         // notify receiver
-        if let Some(store) = store {
-            crate::sys::xstore_channel_unpark(store);
+        if !self.receiver.is_null() {
+            // only if a receiver is registered
+            if let Some(store) = store {
+                crate::sys::xstore_channel_unpark(store);
+            }
         }
-
         Ok(())
     }
 
@@ -280,9 +282,10 @@ impl Channel {
     /// Sends a message into the channel.
     pub fn send(&self, msg: Message, store: Option<i32>) -> Result<(), SendError> {
         let token = &mut Token::default();
+        let backoff = Backoff::new();
+
         loop {
             // Try sending a message several times.
-            let backoff = Backoff::new();
             loop {
                 if self.start_send(token) {
                     let res = unsafe { self.write(token, msg, store) };
@@ -290,14 +293,12 @@ impl Channel {
                 }
 
                 if backoff.is_completed() {
+                    backoff.reset();
                     break;
                 } else {
                     backoff.snooze();
                 }
             }
-
-            // TODO: can this be better?
-            backoff.spin();
         }
     }
 
@@ -400,9 +401,10 @@ impl Channel {
     /// Receives a message from the channel.
     pub fn recv(&self) -> Result<Message, RecvError> {
         let token = &mut Token::default();
+        let backoff = Backoff::new();
+
         loop {
             // Try receiving a message several times.
-            let backoff = Backoff::new();
             loop {
                 if self.start_recv(token) {
                     let res = unsafe { self.read(token) };
@@ -410,14 +412,12 @@ impl Channel {
                 }
 
                 if backoff.is_completed() {
+                    backoff.reset();
                     break;
                 } else {
                     backoff.snooze();
                 }
             }
-
-            // TODO: improve
-            backoff.spin();
         }
     }
 

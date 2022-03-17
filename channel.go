@@ -8,17 +8,17 @@ const uintptr_t slot_size = sizeof(Slot);
 import "C"
 
 import (
+	"encoding/binary"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
-	"encoding/binary"
-	
+
 	gs "github.com/dignifiedquire/gsysint"
 	"github.com/dignifiedquire/gsysint/g"
 	"github.com/dignifiedquire/gsysint/trace"
 )
 
-var slotSize uintptr 
+var slotSize uintptr
 
 func init() {
 	slotSize = uintptr(C.slot_size)
@@ -29,7 +29,7 @@ func msg_error(msg *Message, err int32) *Message {
 	msgBytes := msg.Bytes()
 	msgBytes[0] = 0 // error
 	binary.LittleEndian.PutUint32(msgBytes[1:5], uint32(err))
-	
+
 	return msg
 }
 
@@ -37,7 +37,7 @@ func make_response(msg *Message, bytes []byte) *Message {
 	msg.len = C.uint64_t(len(bytes))
 	msgBytes := msg.Bytes()
 	copy(msgBytes, bytes)
-	
+
 	return msg
 }
 
@@ -150,20 +150,20 @@ func (c *RawChannel) TrySend(msg *Message) *Message {
 
 func (c *RawChannel) Send(msg *Message) *Message {
 	token := defaultToken()
+	backoff := NewBackoff()
+
 	for {
-		backoff := NewBackoff()
 		for {
 			if c.startSend(&token) {
 				return c.write(&token, msg)
 			}
 			if backoff.IsCompleted() {
+				backoff.Reset()
 				break
 			} else {
 				backoff.Snooze()
 			}
 		}
-
-		backoff.Spin()
 	}
 }
 
@@ -261,15 +261,16 @@ func (c *RawChannel) TryRecv() *Message {
 
 func (c *RawChannel) Recv(l *g.Mutex) *Message {
 	token := defaultToken()
+	backoff := NewBackoff()
 
 	for {
-		backoff := NewBackoff()
 		for {
 			if c.startRecv(&token) {
 				return c.read(&token)
 			}
 
 			if backoff.IsCompleted() {
+				backoff.Reset()
 				break
 			} else {
 				backoff.Snooze()
@@ -277,15 +278,13 @@ func (c *RawChannel) Recv(l *g.Mutex) *Message {
 		}
 
 		if l != nil {
-		// store pointer in the channel, to this goroutine
+			// store pointer in the channel, to this goroutine
 			atomic.StorePointer(&c.receiver, g.GetG())
 			gs.Lock(l)
 			// park
 			gs.GoParkUnlock(l, g.WaitReasonZero, trace.TraceEvNone, 1)
 			// clear out ourselves
 			atomic.StorePointer(&c.receiver, nil)
-		} else {
-			backoff.Spin()
 		}
 	}
 

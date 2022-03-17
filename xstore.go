@@ -1,21 +1,19 @@
 package main
 
-
 // #include "xstore.h"
 import "C"
 
 import (
 	"fmt"
-	"unsafe"
 	"reflect"
+	"unsafe"
 
-	"github.com/filecoin-project/lotus/blockstore"
-	"github.com/ipfs/go-cid"
 	gs "github.com/dignifiedquire/gsysint"
 	"github.com/dignifiedquire/gsysint/g"
+	"github.com/filecoin-project/lotus/blockstore"
 	blocks "github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-cid"
 )
-
 
 //export xstore_channel_unpark
 func xstore_channel_unpark(store C.int32_t) {

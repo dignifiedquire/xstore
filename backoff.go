@@ -1,7 +1,9 @@
 package main
 
 import "runtime"
-import "time"
+
+// import "time"
+import "github.com/dignifiedquire/xstore/asm"
 
 const spinLimit = 6
 const yieldLimit = 10
@@ -10,6 +12,8 @@ const yieldLimit = 10
 type Backoff struct {
 	step uint
 }
+
+var k int = 0
 
 // New creates a new Backoff.
 func NewBackoff() Backoff {
@@ -20,9 +24,19 @@ func (b *Backoff) Reset() {
 	b.step = 0
 }
 
+func spin(i int) {
+	// time.Sleep(1 * time.Nanosecond)
+	//runtime.Gosched()
+	asm.MmPause()
+}
+
+func yield() {
+	runtime.Gosched()
+}
+
 func (b *Backoff) Spin() {
 	for i := 0; i < 1<<Min(b.step, spinLimit); i++ {
-		time.Sleep(1 * time.Nanosecond)
+		spin(i)
 	}
 
 	if b.step <= spinLimit {
@@ -33,10 +47,10 @@ func (b *Backoff) Spin() {
 func (b *Backoff) Snooze() {
 	if b.step <= spinLimit {
 		for i := uint(0); i < 1<<b.step; i++ {
-			time.Sleep(1 * time.Nanosecond)
+			spin(int(i))
 		}
 	} else {
-		runtime.Gosched()
+		yield()
 	}
 
 	if b.step <= yieldLimit {
